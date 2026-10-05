@@ -22,6 +22,7 @@ Guidance for coding agents (and humans) changing this repository. For what the p
 | `tests/test_offline.py` | pytest shim over `run_offline.py`; adds no cases. |
 | `tests/fixtures/mockbrain/` | Smallest vault root that exercises the conventions: router table, one prefixed vault, a decoy `qa/` note. |
 | `USERMANUAL.md` | End-user manual: modes, gates, walkthroughs, troubleshooting. |
+| `SECURITY.md` | How to report a vulnerability; supported version. |
 | `installer/cli.js` | The npx installer (`npx github:bn0a/megavault install` / `uninstall`; the package is not on the npm registry), the secondary install path. Node built-ins only, no dependencies. Copies `skills/megavault/` and `agents/*.md` into a Claude Code config dir; `--force` and `uninstall` touch only the files the package ships. The skill directory name is the `SKILL_DIR` constant. Not in `bin/` on purpose: a plugin's top-level `bin/` is put on the Bash `PATH` while the plugin is enabled, and claude.ai/Cowork refuse plugins that have one. |
 | `package.json` | npm package metadata. Its `files` whitelist decides what the tarball ships: `installer/`, `skills/`, `agents/`, `.claude-plugin/`, `README.md`, `LICENSE`. No dependencies and no lockfile (a lockfile would make Claude Code run a dependency install when it caches the plugin). |
 | `.claude/CLAUDE.md` | Instructions for agents working on this repo. Kept out of the repository root because a root `CLAUDE.md` is a plugin-validation warning (it is not loaded for plugin users). |

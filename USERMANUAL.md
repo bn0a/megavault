@@ -6,12 +6,91 @@ that was *computed* from verified quotes, not asserted by a model.
 **Terms.** The **vault root** (the `--brain` flag; called *the brain* below) is one git-tracked
 folder whose `README.md` has a `## Router` table. Each research topic is published into it as a
 **vault**, a subfolder. **First-hand areas** (`field-notes/`) hold your own notes; the tool
-validates them but never writes them. "I" below is the coordinator skill.
+validates them but never writes them. **Reserved folders** (`qa/`, `backlog/`, `logs/`, `design/`)
+are folders a vault root may keep for its own use; the tool reads them for basename collisions but
+never writes into them. "I" below is the coordinator skill.
 
 Fresh scratch vaults land in `<VAULT_ROOT>/<topic-slug>/` (default `./vault`, override with
 `$RESEARCH_VAULT_ROOT` or `--vault-root`), except that a scratch vault never lands inside a vault
 root: then it goes to the run directory. Vaults meant for the brain are published into it with
 `publish --brain <root> --vault <name>`.
+
+---
+
+## Quickstart
+
+These steps assume the plugin is installed (see [Install](#install)).
+
+1. Create an empty vault root. The engine treats a folder as a vault root only if its `README.md` has a `## Router` heading; the table under it is where each published topic gets a row.
+
+   ```sh
+   mkdir ~/research-vault && cd ~/research-vault
+   git init
+   cat > README.md <<'EOF'
+   # Research vault
+
+   ## Router
+
+   | Vault | When to look here | Entry point |
+   |---|---|---|
+   EOF
+   git add README.md && git commit -m "Empty research vault"
+   export RESEARCH_VAULT_ROOT=~/research-vault
+   ```
+
+   On Windows PowerShell:
+
+   ```powershell
+   mkdir ~\research-vault; cd ~\research-vault
+   git init
+   [IO.File]::WriteAllText("$PWD\README.md", "# Research vault`n`n## Router`n`n| Vault | When to look here | Entry point |`n|---|---|---|`n")
+   git add README.md; git commit -m "Empty research vault"
+   $env:RESEARCH_VAULT_ROOT = "$HOME\research-vault"
+   ```
+
+   Either snippet writes the same file (LF line endings, no byte-order mark) and sets the variable for the current shell only. Start Claude Code from that shell, or set the variable in your shell profile, so the session sees it; otherwise a scratch vault lands in `./vault` of the session's working directory.
+
+2. In Claude Code:
+
+   ```text
+   /megavault plan How do light level and watering interval change the growth of pothos cuttings? --mode small
+   ```
+
+   This step creates the run, so pick its budget mode here: `--mode small|standard|vault` (default `standard`; see [Budget modes](#budget-modes)). Start with `small`: in the few runs measured in the [README](README.md#measured-on-real-runs) that recorded tokens, 5 to 10 domains used roughly 1.4 to 7 million subagent tokens each. You get a proposed taxonomy of domains. Approve it, edit it, or cut it. Only recon searches run before your approval.
+
+3. Run it:
+
+   ```text
+   /megavault run
+   /megavault status
+   ```
+
+   `run` executes the waves, verification and synthesis within the mode's ceilings. `status` shows coverage, claim statuses and the remaining budget at any time.
+
+   At the end, `run` writes a scratch copy of the vault. Because `RESEARCH_VAULT_ROOT` is a vault root, that copy goes into the run directory, not into your vault, so the vault stays clean for step 4.
+
+4. Publish into the vault:
+
+   ```text
+   /megavault publish --brain ~/research-vault --vault houseplants
+   ```
+
+   Publishing into a vault root is a dry run until `--apply` is added; the dry run builds the vault in staging, checks basename collisions across the whole vault root, and runs the validation gate. It ends by showing the vault name and prefix. Confirm them and I run it again with `--apply`, which moves the vault in and adds its router row. You can also type the second step yourself:
+
+   ```text
+   /megavault publish --brain ~/research-vault --vault houseplants --apply
+   ```
+
+What you get, under `~/research-vault/houseplants/`:
+
+- `00 Houseplants Home.md`, the entry page, plus one folder and map-of-content page per domain.
+- `90 Evidence/`: Claim Ledger (every claim, its status, scope and caveat; read this first), Source Register (with the source profile and every policy exception the run used), Evidence Map (every quote and its check result), Contradictions, Gaps and Backlog, Wanted Notes.
+- `99 Meta/`: Validation Report and Change Log.
+- A new row in the router table of `README.md`.
+
+The full run (cached pages, records, packets, reports) stays in `~/.claude/research-runs/<run-id>/`.
+
+Other modes: `expand` (research what an existing vault still lacks), `extract` (data tables with cell-level checks), `resume`, `validate`, `policy`. See [Modes](#modes) below.
 
 ---
 
@@ -63,12 +142,53 @@ check from what needs judgment, and tells you which is which.
 - whether the claim's scope exceeds its evidence
 - whether a source is fit for that kind of claim
 
+A source's tier and a claim's type and importance are also set by the agents that return them. They
+decide the tier cap and whether a claim needs two origin groups.
+
 The verifier reviews disputed, qualified and central claims. Its new or narrowed claims and
 contradictions are ingested like any worker's; its entailment rulings are applied by me, the
 coordinator, and never change a status on their own.
 
 So when you read `supported` in the ledger, it means something specific. When you read
 `qualified`, it means "real evidence, one origin — do not quote this as settled."
+
+---
+
+## How a run works
+
+Four subagent roles, each with a bounded job, coordinated by the main Claude Code session:
+
+| Role | Model | Job |
+|---|---|---|
+| Prospector | Opus | Scouts one domain of the question. Picks which sources are worth reading. Returns a ranked URL shortlist and a claim skeleton. |
+| Extractor | Sonnet | Fetches the chosen URLs, caches the raw text, returns verbatim excerpts with locators. Transcribes, does not judge. |
+| Verifier | Opus | Judges whether each excerpt actually entails its claim and whether the claim's scope exceeds the evidence. Returns rulings, narrowed claims and contradictions; does not set status. |
+| Synthesist | Opus | Writes notes from accepted claims only and adds no new facts (an instruction, see [Limits and security](#limits-and-security)). |
+
+```mermaid
+flowchart LR
+    Q[Question] --> T[Taxonomy<br/>4-12 domains]
+    T -->|you approve| P[Prospector<br/>per domain]
+    P --> E[Extractors<br/>per URL]
+    E --> I[ingest + verify<br/>research.py]
+    I -->|gaps, conflicts| V[Verifier]
+    V --> I
+    I -->|next wave| P
+    I -->|claims settled| S[Synthesist<br/>per domain]
+    S --> G[publish + validate gate]
+    G --> O[Vault]
+```
+
+The coordinator loop:
+
+1. Propose a taxonomy of 4 to 12 domains and stop for your approval. Only recon searches run before that; no worker is dispatched until you approve.
+2. Run a wave: one prospector per domain, then extractors on the chosen URLs. Workers write JSON into the run's inbox.
+3. `ingest` (the only path from worker results into the run store) and `verify` (the only thing that sets claim status). A quote not found in the cached page is rejected; a near match counts only if it keeps the page's digits and changes no negation, direction or quantity word.
+4. Send the verifier over disputed, qualified and central claims. Its new or narrowed claims, edges and contradictions are ingested like any worker's; its entailment rulings are applied by the coordinator, not read by the engine. Open gaps feed the next wave.
+5. One synthesist per domain writes notes.
+6. Publish behind a validation gate (broken links, orphan notes, metadata, claim anchors). Writes into an existing vault use five verbs only (create, append-row, patch-cell, append-section, append-entry), and a merge plan is shown for approval first.
+
+The run store (`~/.claude/research-runs/<run-id>/`) is the system of record, not the conversation. If a session dies, `resume` continues from the last completed step.
 
 ---
 
@@ -264,8 +384,8 @@ What the dry run is checking, and what will stop it:
 - with `--vault plants/<name>` the group folder `plants/` must already exist and must not itself
   be a vault; the vault's prefix still comes from `<name>`, and the router row reads `plants/<name>/`;
 - the destination must not already exist — publish never overwrites a vault;
-- no basename anywhere in the brain may collide with anything being created (`qa/`, `backlog/`
-  and `logs/` are included in that check, though never written to); repeated `README`
+- no basename anywhere in the brain may collide with anything being created (the reserved
+  folders are included in that check, though never written to); repeated `README`
   files are folder indexes and exempt, unless some note wikilinks a README by basename;
 - the staged vault must validate clean.
 
@@ -412,7 +532,8 @@ one: `adopt <vault> --prefix Mini`.
 
 **A merge exited 2.** Hard stop, and nothing was written. Read the stops in the plan: a
 brain-wide basename collision, an unprefixed target vault, an ID that already exists with
-different text, or a no-write target (`qa/`, `backlog/`, `logs/`, `design/`).
+different text, or a target the tool never writes: a reserved folder (`qa/`, `backlog/`, `logs/`,
+`design/`) or a first-hand area.
 
 **"The vault changed since this plan was made."** Correct refusal — a plan is only replayable
 while the files it read are untouched. Re-run `merge-plan` and review it again.
@@ -463,6 +584,130 @@ run `validate`, then adopt again. Vaults this version writes never have one.
 
 ---
 
+## Install
+
+### Requirements
+
+- [Claude Code](https://code.claude.com/docs), with subagents. Discovery uses Claude Code's WebSearch and WebFetch tools; no API keys. Extractors and verifiers fetch raw pages themselves with `curl` (or Python) through Bash, so WebFetch permission rules do not cover those fetches (see [Limits and security](#limits-and-security)).
+- Python 3.10 or newer (tested on 3.10). Standard library only, nothing to `pip install`.
+- git. The vault you publish into should be a git repository: the coordinator is instructed to stop when it has no `.git`, to check for a clean `git status` before writing into it, and to commit afterwards (the vault folder and `README.md` only). The engine itself does not check.
+- Obsidian, optional. The output is plain Markdown with wikilinks.
+- `curl` or Python on PATH. Extractors and verifiers fetch raw pages through Bash with `curl`: https only, on redirects too, with size and redirect limits. An extractor without `curl` uses a Python one-liner that checks only that the first URL is https. The extractor and verifier are told to refuse a URL that carries credentials or names a loopback, link-local or private host, and the engine refuses such a URL at ingest, so it never becomes a source or a gap. Neither fetch re-checks the host a redirect leads to.
+- Node.js 18 or newer, only for the `npx` install path. The skill itself does not use Node.
+
+### As a Claude Code plugin (recommended)
+
+This repository is both the plugin and its own plugin marketplace. From your shell:
+
+```sh
+claude plugin marketplace add bn0a/megavault
+claude plugin install megavault@megavault
+```
+
+Or inside a Claude Code session:
+
+```text
+/plugin marketplace add bn0a/megavault
+/plugin install megavault@megavault
+```
+
+In a session, `/plugin install` opens the plugin's details so you can pick a scope before installing; run `/reload-plugins` afterwards, or restart Claude Code.
+
+This installs the skill and the four subagents together. Then, in Claude Code:
+
+```text
+/megavault plan <question>
+```
+
+The skill's full name is `/megavault:megavault`; the short `/megavault` works unless another skill or command is also called `megavault`.
+
+| Task | Shell | In a session |
+|---|---|---|
+| Update | `claude plugin marketplace update megavault`, then `claude plugin update megavault@megavault`; the new version loads in the next session | No session form; or turn on auto-update for the `megavault` marketplace in `/plugin` → **Marketplaces** (off by default for third-party marketplaces) |
+| Uninstall | `claude plugin uninstall megavault@megavault` | `/plugin uninstall megavault@megavault` |
+| Remove the marketplace too | `claude plugin marketplace remove megavault` (also uninstalls its plugins) | `/plugin marketplace remove megavault` |
+
+An update installs the new version into a fresh directory, so edits you made inside the installed copy (for example to `scripts/source_profiles.json`) do not carry over. Keep your own copy of anything you edit there.
+
+### Alternatives: npx from GitHub, or a manual copy
+
+Both copy the same files into your Claude Code config directory instead of going through the plugin system. With these, the subagents are named `research-prospector` and so on, without the `megavault:` prefix, and the command is `/megavault`. Use one install path only (see the end of this section).
+
+**npx from GitHub** (the package is not published to the npm registry; this fetches it straight from this repository):
+
+```sh
+npx github:bn0a/megavault install
+```
+
+npm downloads the repository from GitHub (git must be on PATH) and runs the installer in it. The installer copies `skills/megavault/` and `agents/*.md` into your Claude Code config directory, prints every file it installed, and checks that Python 3.10 or newer is on PATH (it warns, it does not fail). It does the same on macOS, Linux and Windows. Apart from that download, nothing goes over the network.
+
+| Command | What it does |
+|---|---|
+| `npx github:bn0a/megavault install` | Install into `~/.claude` (or `$CLAUDE_CONFIG_DIR` if set). Refuses if any of the files already exist. |
+| `npx github:bn0a/megavault install --force` | Overwrite the package's files in an existing install. Files you added under the skill directory are kept and listed. |
+| `npx github:bn0a/megavault install --claude-dir <path>` | Install into another config directory, for example a test directory. |
+| `npx github:bn0a/megavault install --dry-run` | Print what would be installed; change nothing. |
+| `npx github:bn0a/megavault uninstall` | Remove the files `install` copies: the skill's `SKILL.md`, the files the package ships under `scripts/` and `references/`, and the four agent files. Files you added under the skill directory are kept and listed. Takes `--claude-dir` and `--dry-run`. |
+
+`install` is the default command, so `npx github:bn0a/megavault` alone also installs. Exit codes: `0` ok, `1` refused or usage error, `2` error.
+
+**Manual copy**, from a clone of this repository. Copy these and nothing else (do not copy the whole repo; that brings `.git` and `tests/` along):
+
+```sh
+mkdir -p ~/.claude/skills ~/.claude/agents
+cp -R skills/megavault ~/.claude/skills/
+cp agents/*.md ~/.claude/agents/
+```
+
+Resulting tree (npx produces the same):
+
+```text
+~/.claude/
+  skills/megavault/
+    SKILL.md                     coordinator protocol
+    scripts/research.py          the engine: ingest, verify, publish, validate
+    scripts/source_profiles.json source-quality profiles (data, editable)
+    scripts/maintenance/         audits (read-only except retrofit_claim_index.py --apply) + run_stats.py
+    references/                  taxonomy, operations, evidence, sources, expand, data, publishing, field-notes
+  agents/
+    research-prospector.md
+    research-extractor.md
+    research-verifier.md
+    research-synthesist.md
+```
+
+Restart Claude Code after installing so it picks up the skill and the agents. Do not install both the plugin and a copy: you would get two `megavault` skills and two sets of agents.
+
+---
+
+## Limits and security
+
+### Limits
+
+- Discovery sets the ceiling. Verification only rejects; a source nobody found cannot correct a claim.
+- `supported` means at least one passage an agent linked to the claim as support passed the quote check against the cached page, from two distinct origin groups where the claim's type or importance requires it. Entailment is a model judgment: the extractor's when it links the passage, the verifier's only for claims sent to it. It is not an independent fact check, and there is no measured accuracy rate.
+- Entailment and scope judgments are as good as the model making them. Only the quote match and the count of distinct origin groups are checked mechanically. The cached text is written by the extractor, and origin-group labels are assigned by the agents.
+- The quote check catches formatting differences, not changes of meaning. A near match (`fuzzy`) is refused when it changes a digit or a negation, direction or quantity word, but another one-word change (an antonym that list does not name) can pass, and the Evidence Map shows the extractor's quote, not the page's. Whether a passage says what the claim says is the verifier's judgment, made only for the claims sent to it.
+- The synthesist's "accepted claims only, no new facts" rule is an instruction. `ingest` does not check a note's claim ids, and the gate warns, but does not block, when a note cites an unsupported or refuted claim.
+- It is token-heavy. In the few runs where tokens were recorded, 5 to 10 domains used roughly 1.4 to 7 million subagent tokens each. In these runs, sessions hit a ceiling of about 200 WebSearch calls and 20 concurrent subagents (observed, not documented limits), which caps the size of one session's run.
+- The non-English prose warning for first-hand notes is a stop-word and non-ASCII-letter heuristic covering a handful of European languages; it is a hint, not a language detector.
+- Paywalled, JavaScript-only or bot-blocked pages cannot be cached, so they cannot be evidence. They become gaps.
+- The output format is opinionated: Obsidian-style wikilinks, a `## Router` README convention, a fixed claim-ledger table shape. It is not a general note-taking or scraping tool.
+- Writes are atomic but not fsynced; a power cut mid-write can lose the most recent write.
+- `skills/megavault/scripts/research.py` is one large file by design: it is the single place to check whether the model did something the script should have done.
+- Developed and used mainly on Windows with Python 3.10. The code is path-independent; macOS and Linux have had less use.
+
+### Security
+
+- Subagents read untrusted web pages. All four hold `Read`, `Write`, `Glob`, `Grep` and `Bash`; the prospector and verifier also hold `WebSearch` and `WebFetch`, the extractor `WebFetch`; the synthesist has no web tool. Instructions inside a page are treated as data, but that is a model behaviour, not a guarantee.
+- Raw pages are fetched with `curl` through Bash, outside WebFetch's permission rules. Run with permission prompts on: not `--dangerously-skip-permissions`, and no blanket `Bash(*)`, `Bash(curl:*)` or `Bash(python:*)` allow rules. Approve `curl … -o <run cache>` fetches; `python …/research.py …` engine calls; the extractor's two `python -c` one-liners only when they match `agents/research-extractor.md` (steps 1 and 2) character for character apart from the quoted URL and file name; and, in the vault root, the coordinator's `git status`, `git add -- '<vault folder>' README.md` and `git commit`. Refuse any other command. Prefer a sandbox or container for long unattended runs.
+- Enforced by the engine whatever the model does: a URL with `user:password@` or a non-public host (loopback, link-local, private, `localhost`) never becomes a source, cache key, gap or policy URL (free text such as a verbatim quote is stored as written); web text lands in tables, headings and quotes on one line with pipes escaped, so it cannot forge a row or a status; `validate` fails a note with Dataview, Templater, script or remote-embed content; publish checks every path before its first write; commands the engine prints shell-quote every value; `99 Meta/validation.json` holds no local path.
+- Vault content is web-derived: review it before you share it. A source title can still carry its own Markdown link, and a claim text can render as a heading or callout in the Claim index; neither changes a row or a status.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+---
+
 ## Where things live
 
 ```text
@@ -488,11 +733,11 @@ $RESEARCH_VAULT_ROOT                 the vault root ("brain") you publish into, 
 
 ### Environment variables
 
-| Variable | Sets |
-|---|---|
-| `RESEARCH_VAULT_ROOT` | the vault root ("brain") to publish into; also the default parent for fresh scratch vaults, unless it is a vault root |
-| `RESEARCH_BRAIN_ROOT` | alternative name for the brain root when resolving `--brain`, checked after `RESEARCH_VAULT_ROOT`; it does not set the parent of fresh scratch vaults |
-| `RESEARCH_RUNS_ROOT` | where run directories live (default `~/.claude/research-runs`) |
+| Variable | Sets | Default |
+|---|---|---|
+| `RESEARCH_VAULT_ROOT` | the vault root ("brain") to publish into; also the default parent for fresh scratch vaults, unless it is a vault root | `./vault` |
+| `RESEARCH_BRAIN_ROOT` | alternative name for the brain root when resolving `--brain`, checked after `RESEARCH_VAULT_ROOT`; it does not set the parent of fresh scratch vaults | none |
+| `RESEARCH_RUNS_ROOT` | where run directories live | `~/.claude/research-runs` |
 
 The `--vault-root` CLI flag overrides `RESEARCH_VAULT_ROOT` for a single invocation; `--brain`
 overrides the brain root the same way. `--vault-root` and `--runs-root` go before the command
@@ -512,5 +757,5 @@ The run directory is the system of record. Vaults are a projection of it — you
 re-publish a *fresh* vault at any time without losing evidence. Delete a run directory and its
 cached pages are gone, so re-verification would need a fresh fetch.
 
-To hand the skill to someone else, point them at the plugin (see Install in `README.md`), or copy
+To hand the skill to someone else, point them at the plugin (see [Install](#install)), or copy
 `~/.claude/skills/megavault/` and the four `~/.claude/agents/research-*.md` files. There is no other state.

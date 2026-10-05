@@ -7090,7 +7090,7 @@ PERIOD = re.compile(r"^\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}$")
 CALLOUT_HEAD = re.compile(r"^\s*>\s*\[!example\][+-]?\s*Tested first-hand\b", re.I)
 DETAILS_LINK = re.compile(r"Details and data:\s*\[\[([^\]|#\\]*)#((?:[^\]|\\]|\\(?!\|))+)(?:\\?\|[^\]]*)?\]\]")
 # Non-English prose check (a warning, never an error). A letter outside ASCII,
-# and high-frequency function words of seven languages that rarely occur in
+# and high-frequency function words of six languages that rarely occur in
 # English text. Name particles (de, da, di, del, der, van, von, la) and words
 # English also uses (die, per, met, pour, plus, et al., non-, um) are left out.
 NON_ASCII_LETTERS = re.compile(r"[^\x00-\x7F]")
@@ -7113,9 +7113,6 @@ NON_ENGLISH_STOPWORDS = {
     # pt
     "não", "uma", "com", "mais", "mas", "dos", "das", "pelo", "pela", "são",
     "isso", "ainda", "muito", "foi", "ao",
-    # tr
-    "ve", "bir", "için", "değil", "ile", "gibi", "olarak", "daha", "ama", "veya",
-    "çünkü", "ancak", "sonra", "şimdi", "çok",
 }
 
 
