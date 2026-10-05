@@ -1,0 +1,14 @@
+{
+  "name": "megavault",
+  "description": "Marketplace for the megavault Claude Code plugin.",
+  "owner": {
+    "name": "bn0a"
+  },
+  "plugins": [
+    {
+      "name": "megavault",
+      "source": "./",
+      "description": "Turns a research question into evidence-graded Markdown notes; each claim's status is computed by a script from quotes checked against pages cached during the run."
+    }
+  ]
+}

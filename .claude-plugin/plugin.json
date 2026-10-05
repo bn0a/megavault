@@ -1,0 +1,19 @@
+{
+  "name": "megavault",
+  "version": "0.1.0",
+  "description": "Turns a research question into evidence-graded Markdown notes; each claim's status is computed by a script from quotes checked against pages cached during the run. One coordinator skill, four bounded subagents, a deterministic Python engine.",
+  "author": {
+    "name": "bn0a",
+    "url": "https://github.com/bn0a"
+  },
+  "homepage": "https://github.com/bn0a/megavault",
+  "repository": "https://github.com/bn0a/megavault",
+  "license": "MIT",
+  "keywords": [
+    "research",
+    "knowledge-base",
+    "obsidian",
+    "evidence",
+    "subagents"
+  ]
+}

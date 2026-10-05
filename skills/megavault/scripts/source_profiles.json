@@ -1,0 +1,71 @@
+{
+  "_comment": [
+    "Source-quality contract, profile based and topic independent.",
+    "A profile never decides whether a claim is true. It decides which sources may enter",
+    "the record at all (rejection) and how high a claim resting only on a given tier may",
+    "be graded (tier_status_ceiling). Editing this file is expected; it is user data.",
+    "Rule keys, all optional:",
+    "  allow_source_types      null = any; otherwise a whitelist, everything else rejected",
+    "  deny_source_types       blacklist, applied after the whitelist",
+    "  allow_domain_suffixes   host suffixes that are always admitted by this profile",
+    "  deny_domain_suffixes    host suffixes rejected by this profile",
+    "  max_authority_tier      integer; sources with a numerically higher tier are rejected",
+    "  tier_status_ceiling     {tier: max status} applied in verify to the best tier",
+    "                          behind a claim's accepted support"
+  ],
+  "default_profile": "practitioner",
+  "profiles": {
+    "open": {
+      "label": "open",
+      "description": "Nothing is rejected. Quality is expressed as tier labelling, and a claim resting only on tier-5 anecdote cannot rise above qualified.",
+      "allow_source_types": null,
+      "deny_source_types": [],
+      "allow_domain_suffixes": [],
+      "deny_domain_suffixes": [],
+      "max_authority_tier": null,
+      "tier_status_ceiling": {"5": "qualified"}
+    },
+    "strict-academic": {
+      "label": "strict-academic",
+      "description": "Peer-reviewed, primary, official and standards material only. Forums, blogs, wikis, social posts and vendor marketing are rejected at ingest.",
+      "allow_source_types": [
+        "primary", "official", "standard", "regulation", "scholarly", "dataset"
+      ],
+      "deny_source_types": ["community", "analysis", "vendor", "news", "unknown"],
+      "allow_domain_suffixes": [],
+      "deny_domain_suffixes": [
+        "reddit.com", "quora.com", "medium.com", "substack.com", "stackexchange.com",
+        "stackoverflow.com", "twitter.com", "x.com", "facebook.com", "youtube.com",
+        "discord.com", "wikipedia.org", "blogspot.com", "wordpress.com", "tumblr.com"
+      ],
+      "max_authority_tier": null,
+      "tier_status_ceiling": {"4": "qualified", "5": "qualified"}
+    },
+    "practitioner": {
+      "label": "practitioner",
+      "description": "Strict-academic plus signed practitioner material: conference talks, engineering write-ups, technical blogs with a named author. Anonymous forum posts still rejected.",
+      "allow_source_types": [
+        "primary", "official", "standard", "regulation", "scholarly", "dataset",
+        "analysis", "vendor", "news"
+      ],
+      "deny_source_types": ["unknown"],
+      "allow_domain_suffixes": [],
+      "deny_domain_suffixes": [
+        "reddit.com", "quora.com", "stackexchange.com", "stackoverflow.com",
+        "twitter.com", "x.com", "facebook.com", "discord.com"
+      ],
+      "max_authority_tier": null,
+      "tier_status_ceiling": {"5": "qualified"}
+    },
+    "sentiment": {
+      "label": "sentiment",
+      "description": "Forum, review and comment material is the primary artifact, not a fallback. Nothing is rejected and the tier ceiling is lifted, because tier-5 text is exactly what is being measured.",
+      "allow_source_types": null,
+      "deny_source_types": [],
+      "allow_domain_suffixes": [],
+      "deny_domain_suffixes": [],
+      "max_authority_tier": null,
+      "tier_status_ceiling": {}
+    }
+  }
+}

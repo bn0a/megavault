@@ -1,0 +1,36 @@
+{
+  "name": "megavault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Claude Code skill that turns a research question into evidence-graded Markdown notes; each claim's status is computed by a script from quotes checked against pages cached during the run.",
+  "license": "MIT",
+  "author": "bn0a",
+  "homepage": "https://github.com/bn0a/megavault",
+  "bugs": "https://github.com/bn0a/megavault/issues",
+  "bin": {
+    "megavault": "installer/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "installer/",
+    "skills/",
+    "agents/",
+    ".claude-plugin/",
+    "README.md",
+    "LICENSE",
+    "!**/__pycache__/**",
+    "!**/*.pyc"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bn0a/megavault.git"
+  },
+  "keywords": [
+    "claude-code",
+    "skill",
+    "research",
+    "agents"
+  ]
+}
